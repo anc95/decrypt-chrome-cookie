@@ -12,31 +12,23 @@ var crypto = require('crypto-js')
 function getCookieInfo() {
     var info = {
         path: '',
-        password: '',
-        iterations: 0
-    }
-    if (password instanceof Promise) {
-        return npassword
-        .then(function(psd) {
-            info.password = psd
-            console.log(info)
-        })
+        key: ''
     }
 
-    resolve(info)
     var password = null
+    var iterations = 0
 
     return new Promise(function(resolve) {
         switch( process.platform ) {
             case 'darwin':
                 info.path = process.env.HOME + '/Library/Application Support/Google/Chrome/Default/Cookies'
                 password = require('keytar').getPassword('Chrome Safe Storage', 'Chrome')
-                info.iterations = 1003
+                iterations = 1003
                 break;
             case 'linux':
                 info.path = process.env.HOME + '/.config/google-chrome/Default'
-                info.password = 'peanuts'
-                info.iterations = 1
+                password = 'peanuts'
+                iterations = 1
                 break;
             default:
                 console.error( 'Currently your OS is not supported!' )
@@ -46,12 +38,21 @@ function getCookieInfo() {
         if (password instanceof Promise) {
             return password
             .then(function(psd) {
-                info.password = psd
+                info.key = getDerivedKey(password, iterations)
+                resolve(info)
             })
         }
 
+        info.key = getDerivedKey(password, iterations)
         resolve(info)
     })
+}
+
+function getDerivedKey(password, iterations) {
+    var KEYLENGTH = 16
+    var SALT = 'saltysalt'
+    
+    return crypto.pbkdf2Sync(password, SALT, iterations, KEYLENGTH, 'sha1')
 }
 
 function initDB(path) {
