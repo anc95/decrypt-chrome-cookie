@@ -13,6 +13,8 @@ var KEY_LENGTH = 16
 var SALT = 'saltysalt'
 var IV = new Buffer(new Array(KEY_LENGTH + 1).join(' '))
 
+var DBIns = getDBIns()
+
 function getCookieInfo() {
     var info = {
         path: '',
@@ -63,13 +65,36 @@ function decryptorCookie(key, iv, encryptedCookie) {
     return decryptedCookie.toString() + decipher.final('utf8')
 }
 
-function initDB(path) {
+function getDBIns(path) {
+    var db = null
+    var dbClose = false
+
     if (!fs.existsSync(path)) {
         throw(new Error('Ensure Chrome is installed on this deveice?'))
     }
 
-    db = new sqlite3.Database(path)
-    return db
+    return {
+        getDB: function(path) {
+            if (dbClose) {
+                db = new sqlite3.Database(path)
+            }
+
+            return db
+        },
+        closeDB: function(callback) {
+            if (dbClose) {
+                return
+            }
+
+            db.close(function(err, cb) {
+                db.dbClose = true
+
+                if (err) {
+                    return callback(err)
+                }
+            })
+        }
+    }
 }
 
 function ifMatchHost(rawUrl, hostKey) {
@@ -92,7 +117,7 @@ module.exports = function (urlVal, callback) {
 
     return getCookieInfo()
     .then(function(cookieInfo) {
-        db = initDB(cookieInfo.path)
+        db = DBIns.getDB(cookieInfo.path)
         db.serialize(function() {
             db.each( "SELECT * FROM cookies where host_key like '%" + domain + "%'", function( err, cookie ) {
                 if (err) {
@@ -116,11 +141,15 @@ module.exports = function (urlVal, callback) {
                 fullCookiesInfo.push(cookie)
             }, function() {
                 if (hasCallback) {
+                    DBIns.closeDB(function(err) {
+                        if (err) {
+                            return callback(err)
+                        }
+                    })
                     return callback(null, cookies, fullCookiesInfo)
                 }
             });
 
         });
-        db.close();
     })
 }
