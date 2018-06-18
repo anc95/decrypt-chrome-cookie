@@ -76,17 +76,25 @@ function ifMatchHost(rawUrl, hostKey) {
     return rawUrl.indexOf(hostKey) > -1
 }
 
+function getDomain(hostname) {
+    hostname = hostname.toLowerCase()
+    var res = /(\.[a-z]+\.[a-z]+$)/.exec(hostname)
+
+    return res && res[1]
+}
+
 module.exports = function (urlVal, callback) {
     var urlInfo = url.parse(urlVal)
     var cookies = {}
     var fullCookiesInfo = []
     var hasCallback = typeof callback === 'function'
+    var domain = getDomain(urlInfo.hostname)
 
     return getCookieInfo()
     .then(function(cookieInfo) {
         db = initDB(cookieInfo.path)
         db.serialize(function() {
-            db.each( "SELECT * FROM cookies where host_key like '%" + '.' + urlInfo.hostname + "%'", function( err, cookie ) {
+            db.each( "SELECT * FROM cookies where host_key like '%" + domain + "%'", function( err, cookie ) {
                 if (err) {
                     if (hasCallback) {
                         return callback(err)
@@ -98,13 +106,17 @@ module.exports = function (urlVal, callback) {
                 }
 
                 if (ifMatchHost(urlVal, cookie.host_key)) {
+                    if (cookies[cookie.name]) {
+                        cookies[cookie.name] += '; ' + cookie.value
+                    }
+
                     cookies[cookie.name] = cookie.value
                 }
 
                 fullCookiesInfo.push(cookie)
             }, function() {
                 if (hasCallback) {
-                    return callback(cookies, fullCookiesInfo)
+                    return callback(null, cookies, fullCookiesInfo)
                 }
             });
 
