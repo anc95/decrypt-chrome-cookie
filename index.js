@@ -72,6 +72,10 @@ function initDB(path) {
     return db
 }
 
+function ifMatchHost(rawUrl, hostKey) {
+    return rawUrl.indexOf(hostKey) > -1
+}
+
 module.exports = function (urlVal, callback) {
     var urlInfo = url.parse(urlVal)
     var cookies = {}
@@ -93,7 +97,10 @@ module.exports = function (urlVal, callback) {
                     cookie.value = decryptorCookie(cookieInfo.key, IV, cookie.encrypted_value)
                 }
 
-                cookies[cookie.name] = cookie.value
+                if (ifMatchHost(urlVal, cookie.host_key)) {
+                    cookies[cookie.name] = cookie.value
+                }
+
                 fullCookiesInfo.push(cookie)
             }, function() {
                 if (hasCallback) {
