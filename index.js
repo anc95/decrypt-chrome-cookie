@@ -7,7 +7,11 @@
 var fs = require( 'fs' )
 var sqlite3 = require( 'sqlite3' ).verbose()
 var url = require('url')
-var crypto = require('crypto-js')
+var crypto = require('crypto')
+
+var KEY_LENGTH = 16
+var SALT = 'saltysalt'
+var IV = new Buffer(new Array(KEY_LENGTH + 1).join(' '))
 
 function getCookieInfo() {
     var info = {
@@ -38,7 +42,7 @@ function getCookieInfo() {
         if (password instanceof Promise) {
             return password
             .then(function(psd) {
-                info.key = getDerivedKey(password, iterations)
+                info.key = getDerivedKey(psd, iterations)
                 resolve(info)
             })
         }
@@ -49,10 +53,14 @@ function getCookieInfo() {
 }
 
 function getDerivedKey(password, iterations) {
-    var KEYLENGTH = 16
-    var SALT = 'saltysalt'
-    
-    return crypto.pbkdf2Sync(password, SALT, iterations, KEYLENGTH, 'sha1')
+    return crypto.pbkdf2Sync(password, SALT, iterations, KEY_LENGTH, 'sha1')
+}
+
+function decryptorCookie(key, iv, encryptedCookie) {
+    decipher = crypto.createDecipheriv('AES-128-CBC', key, iv)
+    decryptedCookie = decipher.update(encryptedCookie.slice(3))
+
+    return decryptedCookie.toString() + decipher.final('utf8')
 }
 
 function initDB(path) {
@@ -64,24 +72,36 @@ function initDB(path) {
     return db
 }
 
-module.exports = function (url, callback) {
-    getCookieInfo()
+module.exports = function (urlVal, callback) {
+    var urlInfo = url.parse(urlVal)
+    var cookies = {}
+    var fullCookiesInfo = []
+    var hasCallback = typeof callback === 'function'
+
+    return getCookieInfo()
     .then(function(cookieInfo) {
         db = initDB(cookieInfo.path)
         db.serialize(function() {
-            db.each( "SELECT * FROM cookies where host_key like '%" + 'baidu' + "%'", function( err, cookie ) {
-                if ( err ) {
-                    throw err;
+            db.each( "SELECT * FROM cookies where host_key like '%" + '.' + urlInfo.hostname + "%'", function( err, cookie ) {
+                if (err) {
+                    if (hasCallback) {
+                        return callback(err)
+                    }
                 }
 
-                // console.log(cookie)
-            });
-        });
+                if (cookie.value === '' && cookie.encrypted_value.length > 0) {
+                    cookie.value = decryptorCookie(cookieInfo.key, IV, cookie.encrypted_value)
+                }
 
-        console.log(cookieInfo)
-        
+                cookies[cookie.name] = cookie.value
+                fullCookiesInfo.push(cookie)
+            }, function() {
+                if (hasCallback) {
+                    return callback(cookies, fullCookiesInfo)
+                }
+            });
+
+        });
         db.close();
     })
 }
-
-module.exports()
