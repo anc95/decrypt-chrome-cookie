@@ -65,18 +65,18 @@ function decryptorCookie(key, iv, encryptedCookie) {
     return decryptedCookie.toString() + decipher.final('utf8')
 }
 
-function getDBIns(path) {
+function getDBIns() {
     var db = null
-    var dbClose = false
-
-    if (!fs.existsSync(path)) {
-        throw(new Error('Ensure Chrome is installed on this deveice?'))
-    }
+    var dbClose = true
 
     return {
         getDB: function(path) {
             if (dbClose) {
+                if (!fs.existsSync(path)) {
+                    throw(new Error('Ensure Chrome is installed on this deveice?'))
+                }
                 db = new sqlite3.Database(path)
+                dbClose = false
             }
 
             return db
@@ -86,12 +86,14 @@ function getDBIns(path) {
                 return
             }
 
-            db.close(function(err, cb) {
+            db.close(function(err) {
                 db.dbClose = true
 
                 if (err) {
-                    return callback(err)
+                    return excuteCallback(callback, err)
                 }
+
+                excuteCallback(callback, null, 'closed successfully')
             })
         }
     }
@@ -106,6 +108,15 @@ function getDomain(hostname) {
     var res = /(\.[a-z]+\.[a-z]+$)/.exec(hostname)
 
     return res && res[1]
+}
+
+function excuteCallback(callback) {
+    if (typeof callback !== 'function') {
+        return
+    }
+
+    var args = Array.prototype.slice.call(arguments, 1)
+    return callback.apply(null, args)
 }
 
 module.exports = function (urlVal, callback) {
@@ -140,14 +151,13 @@ module.exports = function (urlVal, callback) {
 
                 fullCookiesInfo.push(cookie)
             }, function() {
-                if (hasCallback) {
-                    DBIns.closeDB(function(err) {
-                        if (err) {
-                            return callback(err)
-                        }
-                    })
-                    return callback(null, cookies, fullCookiesInfo)
-                }
+                DBIns.closeDB(function(err) {
+                    if (err) {
+                        excuteCallback(callback, err)
+                    }
+                })
+
+                return excuteCallback(callback, null, cookies, fullCookiesInfo)
             });
 
         });
