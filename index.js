@@ -87,7 +87,7 @@ function getDBIns() {
             }
 
             db.close(function(err) {
-                db.dbClose = true
+                dbClose = true
 
                 if (err) {
                     return excuteCallback(callback, err)
