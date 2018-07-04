@@ -6,7 +6,7 @@ decrypt chrome cookie in javascript way
 npm install chrome-cookie-finder
 ```
 
-## ussage
+## usage
 ```
 var finder = require('chrome-cookie-finder')
 finder('http://www.baidu.com', function(err, cookie, fullCookieInfo) {
