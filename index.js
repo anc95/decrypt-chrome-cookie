@@ -15,7 +15,7 @@ var IV = new Buffer(new Array(KEY_LENGTH + 1).join(' '))
 
 var DBIns = getDBIns()
 
-function getCookieInfo() {
+function getCookieInfo(cookiePath) {
     var info = {
         path: '',
         key: ''
@@ -27,12 +27,12 @@ function getCookieInfo() {
     return new Promise(function(resolve) {
         switch( process.platform ) {
             case 'darwin':
-                info.path = process.env.HOME + '/Library/Application Support/Google/Chrome/Default/Cookies'
+                info.path = cookiePath['darwin']
                 password = require('keytar').getPassword('Chrome Safe Storage', 'Chrome')
                 iterations = 1003
                 break;
             case 'linux':
-                info.path = process.env.HOME + '/.config/google-chrome/Default'
+                info.path = cookiePath['linux']
                 password = 'peanuts'
                 iterations = 1
                 break;
@@ -120,46 +120,60 @@ function excuteCallback(callback) {
 }
 
 module.exports = function (urlVal, callback) {
+    let cookiePath = {
+        'darwin': process.env.HOME + '/Library/Application Support/Google/Chrome/Default/Cookies',
+        'linux': process.env.HOME + '/.config/google-chrome/Default'
+    };
+
+    if (typeof urlVal === 'object') {
+        Object.assign(cookiePath, urlVal.cookiePath);
+        urlVal = urlVal.url;
+    }
+
     var urlInfo = url.parse(urlVal)
     var cookies = {}
     var fullCookiesInfo = []
     var hasCallback = typeof callback === 'function'
     var domain = getDomain(urlInfo.hostname)
 
-    return getCookieInfo()
+    return getCookieInfo(cookiePath)
     .then(function(cookieInfo) {
-        db = DBIns.getDB(cookieInfo.path)
-        db.serialize(function() {
-            db.each( "SELECT * FROM cookies where host_key like '%" + domain + "%'", function( err, cookie ) {
-                if (err) {
-                    if (hasCallback) {
-                        return callback(err)
-                    }
-                }
-
-                if (cookie.value === '' && cookie.encrypted_value.length > 0) {
-                    cookie.value = decryptorCookie(cookieInfo.key, IV, cookie.encrypted_value)
-                }
-
-                if (ifMatchHost(urlVal, cookie.host_key)) {
-                    if (cookies[cookie.name]) {
-                        cookies[cookie.name] += '; ' + cookie.value
-                    }
-
-                    cookies[cookie.name] = cookie.value
-                }
-
-                fullCookiesInfo.push(cookie)
-            }, function() {
-                DBIns.closeDB(function(err) {
+        return new Promise(function (resolve, reject) {
+            db = DBIns.getDB(cookieInfo.path)
+            db.serialize(function() {
+                db.each( "SELECT * FROM cookies where host_key like '%" + domain + "%'", function( err, cookie ) {
                     if (err) {
-                        excuteCallback(callback, err)
+                        if (hasCallback) {
+                            return callback(err)
+                        }
+                        reject(err);
+                        return;
                     }
-                })
 
-                return excuteCallback(callback, null, cookies, fullCookiesInfo)
+                    if (cookie.value === '' && cookie.encrypted_value.length > 0) {
+                        cookie.value = decryptorCookie(cookieInfo.key, IV, cookie.encrypted_value)
+                    }
+
+                    if (ifMatchHost(urlVal, cookie.host_key)) {
+                        if (cookies[cookie.name]) {
+                            cookies[cookie.name] += '; ' + cookie.value
+                        }
+
+                        cookies[cookie.name] = cookie.value
+                    }
+
+                    fullCookiesInfo.push(cookie)
+                }, function() {
+                    DBIns.closeDB(function(err) {
+                        if (err) {
+                            excuteCallback(callback, err)
+                        }
+                    })
+                    resolve({ cookies, fullCookiesInfo })
+                    return excuteCallback(callback, null, cookies, fullCookiesInfo)
+                });
+
             });
-
-        });
+        })
     })
 }
