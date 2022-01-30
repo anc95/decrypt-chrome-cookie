@@ -8,6 +8,7 @@ var fs = require( 'fs' )
 var sqlite3 = require( 'sqlite3' ).verbose()
 var url = require('url')
 var crypto = require('crypto')
+const path = require('path')
 
 var KEY_LENGTH = 16
 var SALT = 'saltysalt'
@@ -119,9 +120,29 @@ function excuteCallback(callback) {
     return callback.apply(null, args)
 }
 
+function findMacCookiePath() {
+    const chromePath = process.env.HOME + '/Library/Application Support/Google/Chrome';
+
+    if (!fs.existsSync(chromePath)) {
+        throw new Error('Chrome is required to be installed on your Machine')
+    }
+
+    const dirs = fs.readdirSync(chromePath).filter(item => item.startsWith('Default'));
+
+    for (let i = 0; i < dirs.length; i++) {
+        const cookiePath = path.join(chromePath, dirs[i], 'Cookies')
+
+        if (!fs.existsSync(cookiePath)) {
+            continue;
+        }
+
+        return cookiePath
+    }
+}
+
 module.exports = function (urlVal, callback) {
     let cookiePath = {
-        'darwin': process.env.HOME + '/Library/Application Support/Google/Chrome/Default/Cookies',
+        'darwin': findMacCookiePath(),
         'linux': process.env.HOME + '/.config/google-chrome/Default'
     };
 
