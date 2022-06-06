@@ -9,7 +9,7 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
-    "chrome-cookies-secure": "^1.1.8",
+    "chrome-cookies-secure": "^2.0.0",
     "crypto-js": "^4.1.1",
     "keytar": "^7.7.0"
   },
